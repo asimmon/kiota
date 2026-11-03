@@ -9,11 +9,11 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <ToolCommandName>kiota</ToolCommandName>
+    <ToolCommandName>kiota-asimmon</ToolCommandName>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Title>Microsoft.OpenApi.Kiota</Title>
-    <PackageId>Microsoft.OpenApi.Kiota</PackageId>
+    <Title>Asimmon.OpenApi.Kiota</Title>
+    <PackageId>Asimmon.OpenApi.Kiota</PackageId>
     <PackageOutputPath>./nupkg</PackageOutputPath>
     <VersionPrefix>1.38.0</VersionPrefix>
     <VersionSuffix>$(VersionSuffix)</VersionSuffix>

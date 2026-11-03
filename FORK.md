@@ -48,10 +48,12 @@ Other languages generate exactly the same code as upstream.
 
 ```bash
 dotnet pack src/kiota/kiota.csproj -c Release -o ./artifacts -p:VersionSuffix=fork.1
-dotnet tool install Microsoft.OpenApi.Kiota --add-source ./artifacts --version 1.38.0-fork.1 --tool-path ./.kiota-fork
+dotnet tool install -g Asimmon.OpenApi.Kiota --add-source ./artifacts --version 1.38.0-fork.1
 ```
 
-The pre-release version suffix keeps the package from being confused with the official one.
+The package is `Asimmon.OpenApi.Kiota` and its command is `kiota-asimmon`, so it installs side by side with the official `kiota` tool. To install a rebuilt package, bump the suffix (`fork.2`, ...) and use `dotnet tool update -g` with the same arguments.
+
+The update check is disabled in `src/kiota/appsettings.json`, as it would otherwise suggest the official upstream release.
 
 ## Syncing with upstream
 
@@ -66,5 +68,6 @@ The fork's changes:
 - the C#-only gate in `KiotaBuilder.SetPropertyRequiredness`
 - `CSharpRefiner.MakeEnumPropertiesNullable`
 - the C# `CodePropertyWriter` / `CodeMethodWriter`
+- the package ID, tool command name and update check of `src/kiota`
 
 The tests live in their own files (`KiotaBuilderTests.RequiredNonNullable.cs`, `Writers/CSharp/RequiredNonNullableWriterTests.cs`).
