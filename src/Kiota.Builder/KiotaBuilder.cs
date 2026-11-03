@@ -1240,7 +1240,7 @@ public partial class KiotaBuilder
     }
     private static readonly StructuralPropertiesReservedNameProvider structuralPropertiesReservedNameProvider = new();
 
-    private CodeProperty? CreateProperty(string childIdentifier, string childType, IOpenApiSchema? propertySchema = null, CodeTypeBase? existingType = null, CodePropertyKind kind = CodePropertyKind.Custom)
+    private CodeProperty? CreateProperty(string childIdentifier, string childType, IOpenApiSchema? propertySchema = null, CodeTypeBase? existingType = null, CodePropertyKind kind = CodePropertyKind.Custom, bool isRequired = false)
     {
         var propertyName = childIdentifier.CleanupSymbolName();
         if (structuralPropertiesReservedNameProvider.ReservedNames.Contains(propertyName))
@@ -1278,7 +1278,25 @@ public partial class KiotaBuilder
             prop.Type.CollectionKind = propertySchema.IsArray() ? CodeTypeBase.CodeTypeCollectionKind.Complex : default;
             LogCreatingProperty(prop.Name, prop.Type.Name);
         }
+        SetPropertyRequiredness(prop, propertySchema, isRequired, existingType != null);
         return prop;
+    }
+    private void SetPropertyRequiredness(CodeProperty prop, IOpenApiSchema? propertySchema, bool isRequired, bool typeIsShared)
+    {
+        prop.IsRequired = isRequired;
+        if (config.Language != GenerationLanguage.CSharp ||
+            !isRequired ||
+            !prop.IsOfKind(CodePropertyKind.Custom) ||
+            (propertySchema?.WriteOnly ?? false) || // never sent back by the service, would be null after deserialization
+            propertySchema.IsExplicitlyNullable())
+            return;
+        prop.IsNonNullable = true;
+        // for collections, the nullability of the type drives the nullability of the elements, which the deserialization relies on
+        if (prop.Type.CollectionKind != CodeTypeBase.CodeTypeCollectionKind.None)
+            return;
+        if (typeIsShared)
+            prop.Type = (CodeTypeBase)prop.Type.Clone();
+        prop.Type.IsNullable = false;
     }
     private void SetPropertyDefaultValue(CodeProperty prop, IOpenApiSchema? propertySchema)
     {
@@ -2810,7 +2828,7 @@ public partial class KiotaBuilder
                             LogOmittedPropertyInvalidSchema(x.Key, model.Name, currentNode.Path);
                             return null;
                         }
-                        return CreateProperty(x.Key, definition.Name, propertySchema: propertySchema, existingType: definition);
+                        return CreateProperty(x.Key, definition.Name, propertySchema: propertySchema, existingType: definition, isRequired: schema.Required?.Contains(x.Key) ?? false);
                     })
                     .OfType<CodeProperty>()
                     .ToArray() ?? [];

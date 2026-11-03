@@ -147,7 +147,21 @@ public class CSharpConventionService : CommonLanguageConventionService
 #pragma warning restore CA1822 // Method should be static
     private static bool ShouldTypeHaveNullableMarker(CodeTypeBase propType, string propTypeName)
     {
-        return propType.IsNullable && (NullableTypes.Contains(propTypeName) || (propType is CodeType codeType && codeType.TypeDefinition is CodeEnum));
+        return propType.IsNullable && IsValueType(propType, propTypeName);
+    }
+    private static bool IsValueType(CodeTypeBase propType, string propTypeName)
+    {
+        return NullableTypes.Contains(propTypeName) || (propType is CodeType codeType && codeType.TypeDefinition is CodeEnum);
+    }
+    /// <summary>
+    /// Whether the type is translated to a value type, collections excluded.
+    /// </summary>
+    internal bool IsValueType(CodeTypeBase propType)
+    {
+        ArgumentNullException.ThrowIfNull(propType);
+        return propType is CodeType currentType &&
+            currentType.CollectionKind == CodeTypeCollectionKind.None &&
+            IsValueType(currentType, TranslateType(currentType));
     }
     private HashSet<string> _namespaceSegmentsNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _namespaceSegmentsNamesLock = new();

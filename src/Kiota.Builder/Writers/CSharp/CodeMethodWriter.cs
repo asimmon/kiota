@@ -398,9 +398,16 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, CSharpConventionSe
                                         .Where(static x => !x.ExistsInBaseType)
                                         .OrderBy(static x => x.Name, StringComparer.Ordinal))
         {
-            writer.WriteLine($"{{ \"{otherProp.WireName.SanitizeCSharpDoubleQuote()}\", n => {{ {otherProp.Name.ToFirstCharacterUpperCase()} = n.{GetDeserializationMethodName(otherProp.Type, codeElement)}; }} }},");
+            writer.WriteLine($"{{ \"{otherProp.WireName.SanitizeCSharpDoubleQuote()}\", n => {{ {otherProp.Name.ToFirstCharacterUpperCase()} = n.{GetDeserializationMethodName(otherProp.Type, codeElement)}{GetNonNullableDeserializationFallback(otherProp, parentClass, codeElement)}; }} }},");
         }
         writer.CloseBlock("};");
+    }
+    private string GetNonNullableDeserializationFallback(CodeProperty property, CodeClass parentClass, CodeMethod method)
+    {
+        // object values are never null, the other parse node methods return null when the value is not of the expected type or an unknown enum member
+        if (!property.IsNonNullable || GetDeserializationMethodName(property.Type, method).StartsWith("GetObjectValue<", StringComparison.Ordinal))
+            return string.Empty;
+        return $" ?? throw new InvalidOperationException(\"Could not deserialize the value of the required property '{property.WireName.SanitizeCSharpDoubleQuote()}' of '{parentClass.Name.ToFirstCharacterUpperCase()}'.\")";
     }
     private string GetDeserializationMethodName(CodeTypeBase propType, CodeMethod method)
     {
@@ -531,8 +538,17 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, CSharpConventionSe
                                         .OrderBy(static x => x.Name))
         {
             var serializationMethodName = GetSerializationMethodName(otherProp.Type, method);
-            writer.WriteLine($"writer.{serializationMethodName}(\"{otherProp.WireName.SanitizeCSharpDoubleQuote()}\", {otherProp.Name.ToFirstCharacterUpperCase()});");
+            writer.WriteLine($"writer.{serializationMethodName}(\"{otherProp.WireName.SanitizeCSharpDoubleQuote()}\", {GetSerializationValue(otherProp, parentClass, method)});");
         }
+    }
+    private string GetSerializationValue(CodeProperty property, CodeClass parentClass, CodeMethod method)
+    {
+        // non-nullable value types read the default value from the backing store when the value hasn't changed, which would get serialized
+        if (property.IsNonNullable &&
+            conventions.IsValueType(property.Type) &&
+            parentClass.GetBackingStoreProperty() is CodeProperty backingStoreProperty)
+            return $"{backingStoreProperty.Name.ToFirstCharacterUpperCase()}?.Get<{conventions.GetTypeString(property.Type, method)}?>(\"{property.WireName.SanitizeCSharpDoubleQuote()}\")";
+        return property.Name.ToFirstCharacterUpperCase();
     }
     private void WriteSerializerBodyForUnionModel(CodeMethod method, CodeClass parentClass, LanguageWriter writer)
     {

@@ -13,17 +13,22 @@ public class CodePropertyWriter : BaseElementWriter<CodeProperty, CSharpConventi
         ArgumentNullException.ThrowIfNull(writer);
         if (codeElement.ExistsInExternalBaseType) return;
         var propertyType = conventions.GetTypeString(codeElement.Type, codeElement);
-        var isNullableReferenceType = !propertyType.EndsWith('?')
-                                      && codeElement.IsOfKind(
+        var isCustomOrQueryParameter = codeElement.IsOfKind(
                                             CodePropertyKind.Custom,
                                             CodePropertyKind.QueryParameter);// Other property types are appropriately constructor initialized
+        var isNullableReferenceType = !propertyType.EndsWith('?')
+                                      && !codeElement.IsNonNullable
+                                      && isCustomOrQueryParameter;
+        var isNonNullableReferenceType = codeElement.IsNonNullable
+                                      && !conventions.IsValueType(codeElement.Type)
+                                      && isCustomOrQueryParameter;
         bool hasDescription = conventions.WriteShortDescription(codeElement, writer);
         conventions.WriteDeprecationAttribute(codeElement, writer);
-        if (isNullableReferenceType)
+        if (isNullableReferenceType || isNonNullableReferenceType)
         {
             CSharpConventionService.WriteNullableOpening(writer);
             if (!hasDescription) conventions.WritePragmaDisable(writer, CSharpConventionService.CS1591);
-            WritePropertyInternal(codeElement, writer, $"{propertyType}?");
+            WritePropertyInternal(codeElement, writer, isNullableReferenceType ? $"{propertyType}?" : propertyType, isNonNullableReferenceType);
             if (!hasDescription) conventions.WritePragmaRestore(writer, CSharpConventionService.CS1591);
             CSharpConventionService.WriteNullableMiddle(writer);
         }
@@ -32,11 +37,11 @@ public class CodePropertyWriter : BaseElementWriter<CodeProperty, CSharpConventi
         WritePropertyInternal(codeElement, writer, propertyType);// Always write the normal way
         if (!hasDescription) conventions.WritePragmaRestore(writer, CSharpConventionService.CS1591);
 
-        if (isNullableReferenceType)
+        if (isNullableReferenceType || isNonNullableReferenceType)
             CSharpConventionService.WriteNullableClosing(writer);
     }
 
-    private void WritePropertyInternal(CodeProperty codeElement, LanguageWriter writer, string propertyType)
+    private void WritePropertyInternal(CodeProperty codeElement, LanguageWriter writer, string propertyType, bool isNonNullableReferenceType = false)
     {
         if (codeElement.Parent is not CodeClass parentClass) throw new InvalidOperationException("The parent of a property should be a class");
         var backingStoreProperty = parentClass.GetBackingStoreProperty();
@@ -56,7 +61,13 @@ public class CodePropertyWriter : BaseElementWriter<CodeProperty, CSharpConventi
             case CodePropertyKind.Custom when backingStoreProperty != null:
                 var backingStoreKey = codeElement.WireName.SanitizeCSharpDoubleQuote();
                 var nullableOp = !codeElement.IsOfKind(CodePropertyKind.AdditionalData) ? "?" : string.Empty;
-                var defaultPropertyValue = codeElement.IsOfKind(CodePropertyKind.AdditionalData) ? " ?? new Dictionary<string, object>()" : string.Empty;
+                var defaultPropertyValue = (codeElement.IsOfKind(CodePropertyKind.AdditionalData), codeElement.IsNonNullable) switch
+                {
+                    (true, _) => " ?? new Dictionary<string, object>()",
+                    (false, true) when isNonNullableReferenceType => "!",
+                    (false, true) when conventions.IsValueType(codeElement.Type) => " ?? default",
+                    _ => string.Empty,
+                };
                 writer.WriteLine($"{conventions.GetAccessModifier(codeElement.Access)} {propertyType} {codeElement.Name.ToFirstCharacterUpperCase()}");
                 writer.StartBlock();
                 writer.WriteLine($"get {{ return {backingStoreProperty.Name.ToFirstCharacterUpperCase()}{nullableOp}.Get<{propertyType}>(\"{backingStoreKey}\"){defaultPropertyValue}; }}");
@@ -74,6 +85,9 @@ public class CodePropertyWriter : BaseElementWriter<CodeProperty, CSharpConventi
                 goto default;
             case CodePropertyKind.QueryParameters:
                 defaultValue = $" = new {propertyType}();";
+                goto default;
+            case CodePropertyKind.Custom when isNonNullableReferenceType:
+                defaultValue = " = default!;";
                 goto default;
             default:
                 writer.WriteLine($"{conventions.GetAccessModifier(codeElement.Access)} {propertyType} {codeElement.Name.ToFirstCharacterUpperCase()} {{ {simpleBody} }}{defaultValue}");

@@ -63,6 +63,22 @@ public static class OpenApiSchemaExtensions
         };
     }
 
+    /// <summary>
+    /// Whether the description allows null values for this schema.
+    /// OpenAPI.NET discards "nullable: true" when the schema has no type, which is how most generators describe nullable references
+    /// (e.g. { nullable: true, allOf: [ { $ref } ] }), so typeless single entry wrappers around a reference are considered nullable.
+    /// </summary>
+    internal static bool IsExplicitlyNullable(this IOpenApiSchema? schema)
+    {
+        if (schema is null) return true;
+        if (schema.Type is JsonSchemaType type && (type & JsonSchemaType.Null) == JsonSchemaType.Null) return true;
+        if ((schema.AnyOf?.Any(IsNullTypeEntry) ?? false) || (schema.OneOf?.Any(IsNullTypeEntry) ?? false)) return true;
+        if (schema.IsReferencedSchema() || schema.Type is not null and not 0) return false;
+        var compositions = new[] { schema.AllOf, schema.OneOf, schema.AnyOf }.Where(static x => x is { Count: > 0 }).ToArray();
+        return compositions is [{ Count: 1 } entries] && entries[0].IsReferencedSchema();
+    }
+    private static bool IsNullTypeEntry(IOpenApiSchema schema) => schema.Type is JsonSchemaType type && (type & JsonSchemaType.Null) == JsonSchemaType.Null;
+
     public static bool IsArray(this IOpenApiSchema? schema)
     {
         return schema is { Type: JsonSchemaType.Array or (JsonSchemaType.Array | JsonSchemaType.Null) } && schema.Items is not null &&
@@ -138,6 +154,8 @@ public static class OpenApiSchemaExtensions
             result.AnyOf?.Clear();
             if (subSchema.Properties is not null)
                 result.TryAddProperties(subSchema.Properties);
+            if (subSchema.Required is not null)
+                result.TryAddRequired(subSchema.Required);
             result.AllOf ??= [];
             result.AllOf.AddRange(subSchema.AllOf);
             schema.AddOriginalReferenceIdExtension(result);
@@ -158,6 +176,8 @@ public static class OpenApiSchemaExtensions
             result.OneOf?.Clear();
             if (subSchema.Properties is not null)
                 result.TryAddProperties(subSchema.Properties);
+            if (subSchema.Required is not null)
+                result.TryAddRequired(subSchema.Required);
             result.AllOf ??= [];
             result.AllOf.AddRange(subSchema.AllOf);
             schema.AddOriginalReferenceIdExtension(result);
@@ -206,6 +226,7 @@ public static class OpenApiSchemaExtensions
         schema.AddOriginalReferenceIdExtension(result);
 
         result.TryAddProperties(entriesToMerge.Where(static x => x.Properties is not null).SelectMany(static x => x.Properties!));
+        result.TryAddRequired(entriesToMerge.Where(static x => x.Required is not null).SelectMany(static x => x.Required!));
 
         return result;
     }
@@ -238,6 +259,15 @@ public static class OpenApiSchemaExtensions
         {
             schema.Properties.TryAdd(property.Key, property.Value);
         }
+    }
+
+    internal static void TryAddRequired(this OpenApiSchema schema, IEnumerable<string> required)
+    {
+        // always allocate a new set as the shallow copy might share the set with the source schema
+        var result = schema.Required is null ? new HashSet<string>(StringComparer.Ordinal) : new HashSet<string>(schema.Required, StringComparer.Ordinal);
+        result.UnionWith(required);
+        if (result.Count > 0)
+            schema.Required = result;
     }
 
     public static bool IsIntersection(this IOpenApiSchema? schema)

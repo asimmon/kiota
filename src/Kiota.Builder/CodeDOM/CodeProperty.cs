@@ -122,6 +122,20 @@ public class CodeProperty : CodeTerminalWithKind<CodePropertyKind>, IDocumentedE
     {
         get; set;
     }
+    /// <summary>
+    /// Indicates if the property is listed in the required properties of its parent schema.
+    /// </summary>
+    public bool IsRequired
+    {
+        get; set;
+    }
+    /// <summary>
+    /// Indicates if the property is required and not nullable in the description, and should be generated as a non-nullable type.
+    /// </summary>
+    public bool IsNonNullable
+    {
+        get; set;
+    }
 
     public object Clone()
     {
@@ -143,6 +157,8 @@ public class CodeProperty : CodeTerminalWithKind<CodePropertyKind>, IDocumentedE
             OriginalPropertyFromBaseType = OriginalPropertyFromBaseType?.Clone() as CodeProperty,
             Deprecation = Deprecation,
             IsPrimaryErrorMessage = IsPrimaryErrorMessage,
+            IsRequired = IsRequired,
+            IsNonNullable = IsNonNullable,
         };
         return property;
     }
